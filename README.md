@@ -32,10 +32,11 @@ curl -L https://foundry.paradigm.xyz | bash
 foundryup
 ```
 
-Le dipendenze (OpenZeppelin, forge-std) sono già incluse nella cartella
-`lib/`. Se mancassero:
+Le dipendenze (OpenZeppelin, forge-std) non sono incluse nel repo (vedi
+`.gitignore`): dopo il clone vanno installate in `lib/`:
 
 ```bash
+forge install foundry-rs/forge-std@v1.16.2 --no-git
 forge install OpenZeppelin/openzeppelin-contracts@v5.1.0 --no-git
 ```
 
@@ -222,4 +223,4 @@ forge test --match-contract ReputationTest -vv                         # 9  -- p
 - **Tokenomica di `CommunityCredit`**: cap sulla supply e decadimento dei
   saldi non spesi nel tempo (vedi il `// TODO` in `CommunityCredit.sol`).
 - **dApp web** minimale (wallet connect + dashboard proposte/voto).
-# tesi-civic-dao
+

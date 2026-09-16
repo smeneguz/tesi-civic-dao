@@ -1,0 +1,25 @@
+# Foundry build/run artifacts
+out/
+cache/
+broadcast/
+foundry-pp/
+
+# Dependencies: installed via `forge install` (see README), not vendored.
+lib/
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# WSL/Windows "downloaded from the internet" markers (alternate data streams)
+*:Zone.Identifier
