@@ -37,10 +37,11 @@
     - [10.3 Soglia per ruoli funzionali](#103-soglia-per-ruoli-funzionali)
   - [11. ParticipatoryBudget — binario pubblico (Quadratic Voting)](#11-participatorybudget--binario-pubblico-quadratic-voting)
     - [11.1 Ruoli e struct](#111-ruoli-e-struct)
-    - [11.2 Apertura round: registrazione atomica dello slate](#112-apertura-round-registrazione-atomica-dello-slate)
-    - [11.3 `castVotes`: voto quadratico, un cittadino un voto (nel senso di "una scheda")](#113-castvotes-voto-quadratico-un-cittadino-un-voto-nel-senso-di-una-scheda)
-    - [11.4 Chiusura permissionless e quorum senza arrotondamento](#114-chiusura-permissionless-e-quorum-senza-arrotondamento)
-    - [11.5 `recordOutcome` — obbligo di motivazione codificato](#115-recordoutcome--obbligo-di-motivazione-codificato)
+    - [11.2 Macchina a stati: Round e Outcome](#112-macchina-a-stati-round-e-outcome)
+    - [11.3 Apertura round: registrazione atomica dello slate](#113-apertura-round-registrazione-atomica-dello-slate)
+    - [11.4 `castVotes`: voto quadratico, un cittadino un voto (nel senso di "una scheda")](#114-castvotes-voto-quadratico-un-cittadino-un-voto-nel-senso-di-una-scheda)
+    - [11.5 Chiusura permissionless e quorum senza arrotondamento](#115-chiusura-permissionless-e-quorum-senza-arrotondamento)
+    - [11.6 `recordOutcome` — obbligo di motivazione codificato](#116-recordoutcome--obbligo-di-motivazione-codificato)
   - [12. Deploy e risoluzione della dipendenza circolare](#12-deploy-e-risoluzione-della-dipendenza-circolare)
   - [13. Componenti previste ma non ancora implementate](#13-componenti-previste-ma-non-ancora-implementate)
 
@@ -721,7 +722,51 @@ struct Round {
 }
 ```
 
-### 11.2 Apertura round: registrazione atomica dello slate
+### 11.2 Macchina a stati: Round e Outcome
+
+A differenza di `CivicProject` (§5.1), qui la macchina a stati è
+deliberatamente piatta: coerente col principio "Option A" (§11, sopra), il
+contratto **attesta** fatti invece di decidere, quindi non ha bisogno di
+stati intermedi o di branching legato al quorum. Sono due macchine
+distinte e ortogonali:
+
+- `Round.status`: due soli stati, avanzamento lineare.
+- `Outcome`, **per proposta** (non per round): valorizzabile solo a round
+  `Closed`, e mai più modificabile una volta registrato
+  (`OutcomeAlreadyRecorded`).
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: openRound()
+    Active --> Closed: closeRound()<br/>(permissionless, dopo end)
+    Closed --> [*]
+
+    state Closed {
+        [*] --> Pending
+        Pending --> Executed: recordOutcome(Executed)
+        Pending --> NotExecuted: recordOutcome(NotExecuted)<br/>(richiede reasonsCid)
+        Executed --> [*]
+        NotExecuted --> [*]
+    }
+```
+
+Due differenze di rilievo rispetto al binario privato:
+
+1. **Nessun branching sul quorum.** In `CivicProject.closeVoting` il
+   mancato quorum è vincolante e devia la macchina verso `Archived`
+   (§5.4). Qui `quorumReached` è calcolato alla chiusura ma resta un flag
+   solo attestato: `Round` passa comunque a `Closed`, quorum raggiunto o
+   no — la forza vincolante di quell'informazione vive nel regolamento
+   del Comune, non nel contratto.
+2. **`Outcome` non è annidato per accidente.** È disegnato come sotto-stato
+   di `Closed` nel diagramma perché lo è anche nella guardia del codice
+   (`recordOutcome` richiede `r.status == Status.Closed`), ma resta un
+   campo per-proposta indipendente: proposte diverse nello stesso round
+   possono trovarsi in `Pending`, `Executed` o `NotExecuted`
+   simultaneamente, mentre `Round.status` è un unico stato condiviso da
+   tutte.
+
+### 11.3 Apertura round: registrazione atomica dello slate
 
 ```solidity
 function openRound(uint256 creditsPerVoter, string[] calldata proposalCids, uint64 votingDuration)
@@ -733,7 +778,7 @@ function openRound(uint256 creditsPerVoter, string[] calldata proposalCids, uint
 }
 ```
 
-### 11.3 `castVotes`: voto quadratico, un cittadino un voto (nel senso di "una scheda")
+### 11.4 `castVotes`: voto quadratico, un cittadino un voto (nel senso di "una scheda")
 
 ```solidity
 function castVotes(uint256 roundId, uint256[] calldata proposalIds, uint256[] calldata votes) external {
@@ -763,7 +808,7 @@ due volte la stessa proposta per spezzare `n` voti in due voci da `n/2`
 ciascuna, pagando `2*(n/2)² < n²`, aggirando il costo quadratico. Il
 controllo `ProposalsNotSorted` chiude questa via in un solo passaggio.
 
-### 11.4 Chiusura permissionless e quorum senza arrotondamento
+### 11.5 Chiusura permissionless e quorum senza arrotondamento
 
 ```solidity
 function closeRound(uint256 roundId) external {
@@ -773,7 +818,7 @@ function closeRound(uint256 roundId) external {
 }
 ```
 
-### 11.5 `recordOutcome` — obbligo di motivazione codificato
+### 11.6 `recordOutcome` — obbligo di motivazione codificato
 
 ```solidity
 function recordOutcome(uint256 roundId, uint256 proposalId, Outcome outcome, string calldata reasonsCid)
